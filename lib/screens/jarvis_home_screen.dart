@@ -5,6 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../services/whisper_service.dart';
 import '../services/tts_service.dart';
 import '../services/jarvis_ai.dart';
+import 'modo_voz_para_texto.dart';
 
 class JarvisHomeScreen extends StatefulWidget {
   const JarvisHomeScreen({super.key});
@@ -18,6 +19,7 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen>
   late AnimationController _pulseController;
   late AnimationController _voiceWaveController;
   bool _isJarvisActive = false;
+  String _lastProcessedCommand = '';
 
   @override
   void initState() {
@@ -26,7 +28,7 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen>
       duration: const Duration(seconds: 2),
       vsync: this,
     )..repeat();
-    
+
     _voiceWaveController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
@@ -38,16 +40,18 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen>
   Future<void> _initializeServices() async {
     final whisperService = Provider.of<WhisperService>(context, listen: false);
     final ttsService = Provider.of<TTSService>(context, listen: false);
-    
+
     await whisperService.initialize();
     await ttsService.initialize();
-    
+
     setState(() {
       _isJarvisActive = true;
     });
 
     // Jarvis greeting
-    await ttsService.speak("Olá! Eu sou o Jarvis, seu assistente virtual. Como posso ajudá-lo hoje?");
+    await ttsService.speak(
+      "Olá! Eu sou o Jarvis, seu assistente virtual. Como posso ajudá-lo hoje?",
+    );
   }
 
   @override
@@ -60,27 +64,14 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen>
   Future<void> _startListening() async {
     final whisperService = Provider.of<WhisperService>(context, listen: false);
     final ttsService = Provider.of<TTSService>(context, listen: false);
-    final jarvisAI = Provider.of<JarvisAI>(context, listen: false);
 
     if (ttsService.isSpeaking) {
       await ttsService.stop();
     }
 
+    _lastProcessedCommand = ''; // Reset processed command
     await whisperService.startListening();
     _voiceWaveController.repeat();
-
-    // Listen for speech completion
-    whisperService.addListener(() async {
-      if (!whisperService.isListening && whisperService.lastWords.isNotEmpty) {
-        _voiceWaveController.stop();
-        
-        // Process the command with Jarvis AI
-        final response = await jarvisAI.processCommand(whisperService.lastWords);
-        
-        // Speak the response
-        await ttsService.speak(response);
-      }
-    });
   }
 
   Future<void> _stopListening() async {
@@ -95,33 +86,67 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen>
       backgroundColor: Colors.black,
       body: Consumer3<WhisperService, TTSService, JarvisAI>(
         builder: (context, whisperService, ttsService, jarvisAI, child) {
+          // Process command when listening stops and new words are available
+          if (!whisperService.isListening &&
+              whisperService.lastWords.isNotEmpty &&
+              whisperService.lastWords != _lastProcessedCommand) {
+            _lastProcessedCommand = whisperService.lastWords;
+            _voiceWaveController.stop();
+
+            // Process command asynchronously
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              final response = await jarvisAI.processCommand(
+                whisperService.lastWords,
+              );
+              await ttsService.speak(response);
+            });
+          }
+
           return SafeArea(
             child: Column(
               children: [
                 // Header
                 _buildHeader(),
-                
+
                 // Main Jarvis Interface
                 Expanded(
                   flex: 3,
-                  child: _buildJarvisInterface(whisperService, ttsService, jarvisAI),
+                  child: _buildJarvisInterface(
+                    whisperService,
+                    ttsService,
+                    jarvisAI,
+                  ),
                 ),
-                
+
                 // Voice Input Section
                 Expanded(
                   flex: 1,
                   child: _buildVoiceInputSection(whisperService, ttsService),
                 ),
-                
+
                 // Command History
-                Expanded(
-                  flex: 2,
-                  child: _buildCommandHistory(jarvisAI),
-                ),
+                Expanded(flex: 2, child: _buildCommandHistory(jarvisAI)),
               ],
             ),
           );
         },
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ModoVozParaTextoScreen(),
+            ),
+          );
+        },
+        backgroundColor: Colors.cyan,
+        foregroundColor: Colors.black,
+        icon: const Icon(Icons.edit_note),
+        label: const Text(
+          'Redação',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
       ),
     );
   }
@@ -147,17 +172,17 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen>
             ],
             isRepeatingAnimation: false,
           ),
-          const Icon(
-            Icons.settings,
-            color: Colors.cyan,
-            size: 28,
-          ),
+          const Icon(Icons.settings, color: Colors.cyan, size: 28),
         ],
       ),
     );
   }
 
-  Widget _buildJarvisInterface(WhisperService whisperService, TTSService ttsService, JarvisAI jarvisAI) {
+  Widget _buildJarvisInterface(
+    WhisperService whisperService,
+    TTSService ttsService,
+    JarvisAI jarvisAI,
+  ) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -181,26 +206,29 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen>
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.cyan.withValues(alpha: _pulseController.value * 0.5),
+                      color: Colors.cyan.withValues(
+                        alpha: _pulseController.value * 0.5,
+                      ),
                       blurRadius: 30 + (_pulseController.value * 20),
                       spreadRadius: 10 + (_pulseController.value * 10),
                     ),
                   ],
                 ),
-                child: Center(                    child: Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.cyan.withValues(alpha: 0.9),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.cyan.withValues(alpha: 0.6),
-                            blurRadius: 20,
-                            spreadRadius: 5,
-                          ),
-                        ],
-                      ),
+                child: Center(
+                  child: Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.cyan.withValues(alpha: 0.9),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.cyan.withValues(alpha: 0.6),
+                          blurRadius: 20,
+                          spreadRadius: 5,
+                        ),
+                      ],
+                    ),
                     child: const Icon(
                       Icons.visibility,
                       color: Colors.white,
@@ -215,9 +243,9 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen>
                 ? [const ScaleEffect(duration: Duration(milliseconds: 500))]
                 : [],
           ),
-          
+
           const SizedBox(height: 40),
-          
+
           // Status Text
           Text(
             _getStatusText(whisperService, ttsService, jarvisAI),
@@ -228,9 +256,9 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen>
             ),
             textAlign: TextAlign.center,
           ),
-          
+
           const SizedBox(height: 20),
-          
+
           // Last recognized speech
           if (whisperService.lastWords.isNotEmpty)
             Container(
@@ -243,10 +271,7 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen>
               ),
               child: Text(
                 whisperService.lastWords,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 16),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -255,7 +280,10 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen>
     );
   }
 
-  Widget _buildVoiceInputSection(WhisperService whisperService, TTSService ttsService) {
+  Widget _buildVoiceInputSection(
+    WhisperService whisperService,
+    TTSService ttsService,
+  ) {
     return Container(
       padding: const EdgeInsets.all(20),
       child: Row(
@@ -272,10 +300,12 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen>
               ),
               child: const Icon(Icons.stop, color: Colors.white, size: 30),
             ),
-          
+
           // Main Voice Button
           GestureDetector(
-            onTap: whisperService.isListening ? _stopListening : _startListening,
+            onTap: whisperService.isListening
+                ? _stopListening
+                : _startListening,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               width: 80,
@@ -285,8 +315,9 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen>
                 color: whisperService.isListening ? Colors.red : Colors.cyan,
                 boxShadow: [
                   BoxShadow(
-                    color: (whisperService.isListening ? Colors.red : Colors.cyan)
-                        .withValues(alpha: 0.4),
+                    color:
+                        (whisperService.isListening ? Colors.red : Colors.cyan)
+                            .withValues(alpha: 0.4),
                     blurRadius: 20,
                     spreadRadius: 5,
                   ),
@@ -299,7 +330,7 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen>
               ),
             ),
           ),
-          
+
           // Clear History Button
           ElevatedButton(
             onPressed: () {
@@ -357,21 +388,24 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen>
                 ? const Center(
                     child: Text(
                       'Nenhum comando executado ainda',
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 14,
-                      ),
+                      style: TextStyle(color: Colors.grey, fontSize: 14),
                     ),
                   )
                 : ListView.builder(
                     itemCount: jarvisAI.commandHistory.length,
                     reverse: true,
                     itemBuilder: (context, index) {
-                      final command = jarvisAI.commandHistory[
-                          jarvisAI.commandHistory.length - 1 - index];
+                      final command =
+                          jarvisAI.commandHistory[jarvisAI
+                                  .commandHistory
+                                  .length -
+                              1 -
+                              index];
                       return Container(
                         margin: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
                           color: Colors.black.withValues(alpha: 0.3),
@@ -406,23 +440,27 @@ class _JarvisHomeScreenState extends State<JarvisHomeScreen>
     );
   }
 
-  String _getStatusText(WhisperService whisperService, TTSService ttsService, JarvisAI jarvisAI) {
+  String _getStatusText(
+    WhisperService whisperService,
+    TTSService ttsService,
+    JarvisAI jarvisAI,
+  ) {
     if (!_isJarvisActive) {
       return 'Inicializando Jarvis...';
     }
-    
+
     if (jarvisAI.isProcessing) {
       return 'Processando comando...';
     }
-    
+
     if (ttsService.isSpeaking) {
       return 'Jarvis está falando...';
     }
-    
+
     if (whisperService.isListening) {
       return 'Escutando... Fale agora!';
     }
-    
+
     return 'Pronto para ouvir. Toque no microfone para falar.';
   }
 }
