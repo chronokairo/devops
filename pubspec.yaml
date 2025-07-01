@@ -39,9 +39,13 @@ dependencies:
   speech_to_text: ^6.6.0
   flutter_tts: ^3.8.5
   
-  # Audio recording and playback
-  record: ^5.0.4
-  audioplayers: ^5.2.1
+  # Audio recording and playback - simplified for desktop
+  # record: ^5.0.4
+  # audioplayers: ^5.2.1
+  
+  # Desktop window management
+  window_manager: ^0.3.7
+  # bitsdojo_window: ^0.1.6
   
   # HTTP requests
   http: ^1.1.2
@@ -65,8 +69,8 @@ dependencies:
   # Background processing
   isolate: ^2.1.1
   
-  # Audio visualization
-  flutter_sound: ^9.2.13
+  # Audio visualization - temporarily disabled for desktop compatibility
+  # flutter_sound: ^9.2.13
 
 dev_dependencies:
   flutter_test:

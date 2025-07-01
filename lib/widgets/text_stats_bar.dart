@@ -18,15 +18,19 @@ class TextStatsBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.grey[900]?.withOpacity(0.5),
-        border: Border(top: BorderSide(color: Colors.cyan.withOpacity(0.3))),
+        color: Colors.grey[900]?.withAlpha(128),
+        border: Border(top: BorderSide(color: Colors.cyan.withAlpha(77))),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           _buildStatItem('Palavras', wordCount.toString(), Icons.text_fields),
           _buildStatItem('Caracteres', charCount.toString(), Icons.text_format),
-          _buildStatItem('Linhas', lineCount.toString(), Icons.format_list_numbered),
+          _buildStatItem(
+            'Linhas',
+            lineCount.toString(),
+            Icons.format_list_numbered,
+          ),
         ],
       ),
     );
@@ -46,13 +50,7 @@ class TextStatsBar extends StatelessWidget {
             fontSize: 16,
           ),
         ),
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.grey[400],
-            fontSize: 10,
-          ),
-        ),
+        Text(label, style: TextStyle(color: Colors.grey[400], fontSize: 10)),
       ],
     );
   }

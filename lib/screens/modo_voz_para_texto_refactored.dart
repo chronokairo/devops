@@ -1,12 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:animated_text_kit/animated_text_kit.dart';
 import '../services/whisper_service.dart';
 import '../services/tts_service.dart';
-import '../models/writing_mode.dart';
 import '../controllers/text_editor_controller.dart';
 import '../widgets/writing_mode_selector.dart';
 import '../widgets/tools_bar.dart';
@@ -40,10 +38,15 @@ class _ModoVozParaTextoScreenState extends State<ModoVozParaTextoScreen>
   late VoidCallback _whisperListener;
   String _previousLastWords = '';
   Timer? _monitorTimer;
+  late WhisperService _whisperService;
+
+  // Novo: registra o último momento em que houve fala detectada
+  DateTime? _lastHeardTime;
 
   @override
   void initState() {
     super.initState();
+    _whisperService = Provider.of<WhisperService>(context, listen: false);
     _initializeControllers();
     _initializeServices();
   }
@@ -66,10 +69,9 @@ class _ModoVozParaTextoScreenState extends State<ModoVozParaTextoScreen>
   }
 
   Future<void> _initializeServices() async {
-    final whisperService = Provider.of<WhisperService>(context, listen: false);
     final ttsService = Provider.of<TTSService>(context, listen: false);
 
-    await whisperService.initialize();
+    await _whisperService.initialize();
     await ttsService.initialize();
 
     setState(() {
@@ -82,73 +84,107 @@ class _ModoVozParaTextoScreenState extends State<ModoVozParaTextoScreen>
   }
 
   Future<void> _startListening() async {
-    final whisperService = Provider.of<WhisperService>(context, listen: false);
+    debugPrint('_startListening called');
+
+    // Simulação temporária para testar se o botão funciona
+    setState(() {
+      // Simula que está ouvindo
+    });
+
+    // Mostrar que o botão foi pressionado
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Botão Gravar funcionando! (Teste)'),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 2),
+      ),
+    );
+
     final ttsService = Provider.of<TTSService>(context, listen: false);
 
     if (ttsService.isSpeaking) {
       await ttsService.stop();
     }
 
-    whisperService.removeListener(_whisperListener);
-    _previousLastWords = whisperService.lastWords;
+    _whisperService.removeListener(_whisperListener);
+    _previousLastWords = _whisperService.lastWords;
 
     _whisperListener = () {
-      if (whisperService.isListening &&
-          whisperService.partialWords.isNotEmpty) {
-        if (_textEditorController.textController.text !=
-            whisperService.partialWords) {
-          _textEditorController.textController.value = TextEditingValue(
-            text: whisperService.partialWords,
-            selection: TextSelection.collapsed(
-              offset: whisperService.partialWords.length,
-            ),
-          );
-        }
+      debugPrint(
+        'WhisperListener triggered - isListening: ${_whisperService.isListening}, partialWords: "${_whisperService.partialWords}", lastWords: "${_whisperService.lastWords}"',
+      );
+
+      // Atualiza o tempo sempre que há texto parcial ou palavras finais
+      if (_whisperService.isListening &&
+          _whisperService.partialWords.isNotEmpty) {
+        _lastHeardTime = DateTime.now();
       }
 
-      if (!whisperService.isListening &&
-          whisperService.lastWords.isNotEmpty &&
-          whisperService.lastWords != _previousLastWords) {
-        _textEditorController.insertTextAtCursor(whisperService.lastWords);
-        _previousLastWords = whisperService.lastWords;
-        whisperService.clearLastWords();
+      if (!_whisperService.isListening &&
+          _whisperService.lastWords.isNotEmpty &&
+          _whisperService.lastWords != _previousLastWords) {
+        debugPrint('Inserting text: "${_whisperService.lastWords}"');
+        _lastHeardTime = DateTime.now();
+        _textEditorController.insertTextAtCursor(_whisperService.lastWords);
+        _previousLastWords = _whisperService.lastWords;
+        _whisperService.clearLastWords();
         _autoScroll();
       }
     };
 
-    whisperService.addListener(_whisperListener);
+    _whisperService.addListener(_whisperListener);
     _startMonitorTimer();
 
-    await whisperService.startListening();
-    _voiceWaveController.repeat();
-    HapticFeedback.lightImpact();
+    try {
+      await _whisperService.startListening();
+      _voiceWaveController.repeat();
+      HapticFeedback.lightImpact();
+      debugPrint('Started listening successfully');
+    } catch (e) {
+      debugPrint('Error starting listening: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao iniciar gravação: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _stopListening() async {
-    final whisperService = Provider.of<WhisperService>(context, listen: false);
-    await whisperService.stopListening();
+    debugPrint('_stopListening called');
+    await _whisperService.stopListening();
     _voiceWaveController.stop();
     HapticFeedback.lightImpact();
 
-    whisperService.removeListener(_whisperListener);
+    _whisperService.removeListener(_whisperListener);
     _monitorTimer?.cancel();
     _monitorTimer = null;
   }
 
   void _startMonitorTimer() {
     _monitorTimer?.cancel();
-    _monitorTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
-      final whisperService = Provider.of<WhisperService>(
-        context,
-        listen: false,
-      );
-      if (!whisperService.isListening &&
-          whisperService.lastWords.isNotEmpty &&
-          whisperService.lastWords != _previousLastWords) {
-        _textEditorController.insertTextAtCursor(whisperService.lastWords);
-        _previousLastWords = whisperService.lastWords;
-        whisperService.clearLastWords();
-        _autoScroll();
+    _monitorTimer = Timer.periodic(const Duration(milliseconds: 500), (
+      timer,
+    ) async {
+      final silenceTimeout = Duration(seconds: 2);
+      final now = DateTime.now();
+
+      // Atualiza _lastHeardTime se houver texto parcial
+      if (_whisperService.isListening &&
+          _whisperService.partialWords.isNotEmpty) {
+        _lastHeardTime = now;
+      }
+
+      // Só reinicia se não está ouvindo, não há palavras novas, e passou o timeout de silêncio
+      if (!_whisperService.isListening &&
+          _whisperService.lastWords.isEmpty &&
+          (_lastHeardTime == null ||
+              now.difference(_lastHeardTime!) > silenceTimeout)) {
+        await _startListening();
       }
     });
   }
@@ -329,12 +365,12 @@ class _ModoVozParaTextoScreenState extends State<ModoVozParaTextoScreen>
             margin: const EdgeInsets.all(16),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.grey[900]?.withOpacity(0.7),
+              color: Colors.grey[900]?.withAlpha(179), // 0.7 * 255 ≈ 179
               borderRadius: BorderRadius.circular(15),
               border: Border.all(
                 color: whisperService.isListening
-                    ? Colors.red.withOpacity(0.5)
-                    : Colors.cyan.withOpacity(0.3),
+                    ? Colors.red.withAlpha(128)
+                    : Colors.cyan.withAlpha(77),
               ),
             ),
             child: TextField(
@@ -399,9 +435,11 @@ class _ModoVozParaTextoScreenState extends State<ModoVozParaTextoScreen>
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.1),
+        color: Colors.orange.withAlpha(26), // 0.1 * 255 ≈ 26
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+        border: Border.all(
+          color: Colors.orange.withAlpha(77),
+        ), // 0.3 * 255 ≈ 77
       ),
       child: Text(
         'Reconhecendo: "$partialWords"',
@@ -421,9 +459,9 @@ class _ModoVozParaTextoScreenState extends State<ModoVozParaTextoScreen>
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.cyan.withOpacity(0.1),
+        color: Colors.cyan.withAlpha(26), // 0.1 * 255 ≈ 26
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.cyan.withOpacity(0.3)),
+        border: Border.all(color: Colors.cyan.withAlpha(77)), // 0.3 * 255 ≈ 77
       ),
       child: Column(
         children: [
@@ -539,9 +577,7 @@ class _ModoVozParaTextoScreenState extends State<ModoVozParaTextoScreen>
 
   @override
   void dispose() {
-    final whisperService = Provider.of<WhisperService>(context, listen: false);
-    whisperService.removeListener(_whisperListener);
-
+    _whisperService.removeListener(_whisperListener);
     _monitorTimer?.cancel();
     _pulseController.dispose();
     _voiceWaveController.dispose();

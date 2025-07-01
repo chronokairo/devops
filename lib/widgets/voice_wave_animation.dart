@@ -26,13 +26,13 @@ class VoiceWaveAnimation extends StatelessWidget {
               final animationValue = index.isEven
                   ? controller.value
                   : 1 - controller.value;
-              
+
               return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 2),
                 width: 4,
                 height: 20 + (20 * (0.5 + 0.5 * animationValue)),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.8),
+                  color: color.withValues(alpha: 0.8),
                   borderRadius: BorderRadius.circular(2),
                 ),
               );

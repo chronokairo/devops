@@ -21,7 +21,7 @@ class WritingModeSelector extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.grey[900],
         borderRadius: BorderRadius.circular(25),
-        border: Border.all(color: Colors.cyan.withOpacity(0.3)),
+        border: Border.all(color: Colors.cyan.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: WritingMode.modes.map((mode) {
@@ -39,7 +39,7 @@ class WritingModeSelector extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? Colors.cyan.withOpacity(0.2)
+                      ? Colors.cyan.withValues(alpha: 0.2)
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(20),
                   border: isSelected ? Border.all(color: Colors.cyan) : null,

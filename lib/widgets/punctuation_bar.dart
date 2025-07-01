@@ -4,13 +4,19 @@ import 'package:flutter/material.dart';
 class PunctuationBar extends StatelessWidget {
   final ValueChanged<String> onPunctuationSelected;
 
-  const PunctuationBar({
-    super.key,
-    required this.onPunctuationSelected,
-  });
+  const PunctuationBar({super.key, required this.onPunctuationSelected});
 
   static const List<String> _punctuations = [
-    '.', ',', '!', '?', ';', ':', '"', '(', ')', '-'
+    '.',
+    ',',
+    '!',
+    '?',
+    ';',
+    ':',
+    '"',
+    '(',
+    ')',
+    '-',
   ];
 
   @override
@@ -31,7 +37,7 @@ class PunctuationBar extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.grey[800],
                 borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: Colors.cyan.withOpacity(0.3)),
+                border: Border.all(color: Colors.cyan.withValues(alpha: 0.3)),
               ),
               child: Text(
                 punct,

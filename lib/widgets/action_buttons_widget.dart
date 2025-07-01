@@ -69,16 +69,20 @@ class ActionButtonsWidget extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isActive ? color.withOpacity(0.4) : color.withOpacity(0.2),
+          color: isActive
+              ? color.withValues(alpha: 102)
+              : color.withValues(alpha: 51),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isActive ? color.withOpacity(0.8) : color.withOpacity(0.5),
+            color: isActive
+                ? color.withValues(alpha: 204)
+                : color.withValues(alpha: 128),
             width: isActive ? 2 : 1,
           ),
           boxShadow: isActive
               ? [
                   BoxShadow(
-                    color: color.withOpacity(0.3),
+                    color: color.withValues(alpha: 76),
                     blurRadius: 8,
                     spreadRadius: 2,
                   ),
