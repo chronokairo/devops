@@ -98,20 +98,6 @@ class WindowsSpeechService extends ChangeNotifier {
         });
       }
     });
-
-    // Simula resultado final após 4 segundos
-    Timer(const Duration(seconds: 4), () {
-      if (_isListening) {
-        _lastWords =
-            'Olá mundo, este é um teste de reconhecimento de voz no Windows.';
-        _partialWords = '';
-        _isListening = false;
-        debugPrint('Simulated speech recognition completed: $_lastWords');
-        Future.delayed(Duration.zero, () {
-          notifyListeners();
-        });
-      }
-    });
   }
 
   Future<void> stopListening() async {

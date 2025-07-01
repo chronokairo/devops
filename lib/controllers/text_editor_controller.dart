@@ -35,11 +35,12 @@ class TextEditorController extends ChangeNotifier {
   void insertTextAtCursor(String newText) {
     debugPrint('Inserting text at cursor: "$newText"');
 
-    if (newText.isEmpty || newText == _lastTranscription) {
-      debugPrint('Text is empty or same as last transcription, skipping...');
+    if (newText.isEmpty) {
+      debugPrint('Text is empty, skipping...');
       return;
     }
 
+    // Removido: checagem de duplicidade para sempre inserir o texto reconhecido
     _lastTranscription = newText;
     final text = _textController.text;
     final selection = _textController.selection;
@@ -114,6 +115,7 @@ class TextEditorController extends ChangeNotifier {
   void clearText() {
     _textController.clear();
     _lastTranscription = '';
+    debugPrint('Text cleared, reset lastTranscription');
   }
 
   void insertTemplate() {
@@ -122,6 +124,11 @@ class TextEditorController extends ChangeNotifier {
       _textController.text = mode.template;
       _textController.selection = const TextSelection.collapsed(offset: 0);
     }
+  }
+
+  void resetTranscriptionState() {
+    _lastTranscription = '';
+    debugPrint('Transcription state reset');
   }
 
   void _updateStats() {

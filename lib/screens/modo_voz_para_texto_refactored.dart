@@ -40,9 +40,6 @@ class _ModoVozParaTextoScreenState extends State<ModoVozParaTextoScreen>
   Timer? _monitorTimer;
   late WhisperService _whisperService;
 
-  // Novo: registra o último momento em que houve fala detectada
-  DateTime? _lastHeardTime;
-
   @override
   void initState() {
     super.initState();
@@ -78,28 +75,11 @@ class _ModoVozParaTextoScreenState extends State<ModoVozParaTextoScreen>
       _isInitialized = true;
     });
 
-    await ttsService.speak(
-      "Bem-vindo ao módulo de redação por voz! Selecione o tipo de texto e pressione gravar para começar a ditar.",
-    );
+    // Removi a mensagem de boas-vindas para deixar mais limpo
   }
 
   Future<void> _startListening() async {
     debugPrint('_startListening called');
-
-    // Simulação temporária para testar se o botão funciona
-    setState(() {
-      // Simula que está ouvindo
-    });
-
-    // Mostrar que o botão foi pressionado
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Botão Gravar funcionando! (Teste)'),
-        backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
-      ),
-    );
 
     final ttsService = Provider.of<TTSService>(context, listen: false);
 
@@ -115,26 +95,24 @@ class _ModoVozParaTextoScreenState extends State<ModoVozParaTextoScreen>
         'WhisperListener triggered - isListening: ${_whisperService.isListening}, partialWords: "${_whisperService.partialWords}", lastWords: "${_whisperService.lastWords}"',
       );
 
-      // Atualiza o tempo sempre que há texto parcial ou palavras finais
-      if (_whisperService.isListening &&
-          _whisperService.partialWords.isNotEmpty) {
-        _lastHeardTime = DateTime.now();
-      }
-
-      if (!_whisperService.isListening &&
-          _whisperService.lastWords.isNotEmpty &&
+      // Simplificar a lógica: inserir sempre que lastWords mudar e não for vazio
+      if (_whisperService.lastWords.isNotEmpty &&
           _whisperService.lastWords != _previousLastWords) {
         debugPrint('Inserting text: "${_whisperService.lastWords}"');
-        _lastHeardTime = DateTime.now();
         _textEditorController.insertTextAtCursor(_whisperService.lastWords);
         _previousLastWords = _whisperService.lastWords;
-        _whisperService.clearLastWords();
+
+        // Aguarda um frame antes de limpar para garantir que a inserção foi processada
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _whisperService.clearLastWords();
+        });
+
         _autoScroll();
       }
     };
 
     _whisperService.addListener(_whisperListener);
-    _startMonitorTimer();
+    // Timer automático removido - controle manual pelo usuário
 
     try {
       await _whisperService.startListening();
@@ -163,30 +141,6 @@ class _ModoVozParaTextoScreenState extends State<ModoVozParaTextoScreen>
     _whisperService.removeListener(_whisperListener);
     _monitorTimer?.cancel();
     _monitorTimer = null;
-  }
-
-  void _startMonitorTimer() {
-    _monitorTimer?.cancel();
-    _monitorTimer = Timer.periodic(const Duration(milliseconds: 500), (
-      timer,
-    ) async {
-      final silenceTimeout = Duration(seconds: 2);
-      final now = DateTime.now();
-
-      // Atualiza _lastHeardTime se houver texto parcial
-      if (_whisperService.isListening &&
-          _whisperService.partialWords.isNotEmpty) {
-        _lastHeardTime = now;
-      }
-
-      // Só reinicia se não está ouvindo, não há palavras novas, e passou o timeout de silêncio
-      if (!_whisperService.isListening &&
-          _whisperService.lastWords.isEmpty &&
-          (_lastHeardTime == null ||
-              now.difference(_lastHeardTime!) > silenceTimeout)) {
-        await _startListening();
-      }
-    });
   }
 
   void _autoScroll() {
@@ -406,89 +360,12 @@ class _ModoVozParaTextoScreenState extends State<ModoVozParaTextoScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (whisperService.isListening) ...[
+              if (whisperService.isListening)
                 VoiceWaveAnimation(controller: _voiceWaveController),
-                const Text(
-                  'Ouvindo... Fale agora!',
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-              if (whisperService.isListening &&
-                  whisperService.partialWords.isNotEmpty)
-                _buildPartialWordsWidget(whisperService.partialWords),
-              if (whisperService.lastWords.isNotEmpty &&
-                  !whisperService.isListening)
-                _buildLastWordsWidget(whisperService),
             ],
           ),
         );
       },
-    );
-  }
-
-  Widget _buildPartialWordsWidget(String partialWords) {
-    return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.orange.withAlpha(26), // 0.1 * 255 ≈ 26
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Colors.orange.withAlpha(77),
-        ), // 0.3 * 255 ≈ 77
-      ),
-      child: Text(
-        'Reconhecendo: "$partialWords"',
-        style: const TextStyle(
-          color: Colors.orange,
-          fontSize: 12,
-          fontStyle: FontStyle.italic,
-        ),
-        textAlign: TextAlign.center,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
-  }
-
-  Widget _buildLastWordsWidget(WhisperService whisperService) {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.cyan.withAlpha(26), // 0.1 * 255 ≈ 26
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.cyan.withAlpha(77)), // 0.3 * 255 ≈ 77
-      ),
-      child: Column(
-        children: [
-          Text(
-            'Última transcrição: "${whisperService.lastWords}"',
-            style: const TextStyle(color: Colors.cyan, fontSize: 12),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 8),
-          ElevatedButton(
-            onPressed: () {
-              debugPrint('Manual button pressed');
-              _textEditorController.insertTextAtCursor(
-                whisperService.lastWords,
-              );
-              whisperService.clearLastWords();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.cyan,
-              foregroundColor: Colors.black,
-            ),
-            child: const Text('Inserir Manualmente'),
-          ),
-        ],
-      ),
     );
   }
 

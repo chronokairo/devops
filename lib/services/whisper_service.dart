@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'windows_speech_service.dart';
+import 'windows_native_speech_service.dart';
 
 class WhisperService extends ChangeNotifier {
   final SpeechToText _speechToText = SpeechToText();
-  late final WindowsSpeechService _windowsSpeechService;
+  late final WindowsNativeSpeechService _windowsSpeechService;
   bool _isListening = false;
   bool _isInitialized = false;
   String _lastWords = '';
@@ -22,69 +22,91 @@ class WhisperService extends ChangeNotifier {
   double get confidence => _confidence;
 
   WhisperService() {
-    _windowsSpeechService = WindowsSpeechService();
-    // Escutar mudanças do WindowsSpeechService
-    _windowsSpeechService.addListener(_onWindowsSpeechUpdate);
+    if (Platform.isWindows) {
+      _windowsSpeechService = WindowsNativeSpeechService();
+      _windowsSpeechService.addListener(_onWindowsSpeechUpdate);
+    }
   }
-  void _onWindowsSpeechUpdate() {
-    _isListening = _windowsSpeechService.isListening;
-    _lastWords = _windowsSpeechService.lastWords;
-    _partialWords = _windowsSpeechService.partialWords;
 
-    // Use microtask to avoid setState during build
-    scheduleMicrotask(() {
+  void _onWindowsSpeechUpdate() {
+    if (Platform.isWindows) {
+      final oldListening = _isListening;
+      final oldLastWords = _lastWords;
+      final oldPartialWords = _partialWords;
+
+      _isListening = _windowsSpeechService.isListening;
+      _lastWords = _windowsSpeechService.lastWords;
+      _partialWords = _windowsSpeechService.partialWords;
+
+      debugPrint(
+        'Windows speech update: isListening=$_isListening, lastWords="$_lastWords", partialWords="$_partialWords"',
+      );
+
+      // Só notificar se algo mudou
+      if (oldListening != _isListening ||
+          oldLastWords != _lastWords ||
+          oldPartialWords != _partialWords) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          notifyListeners();
+        });
+      }
+    }
+  }
+
+  void clearLastWords() {
+    debugPrint('WhisperService.clearLastWords() called');
+    _lastWords = '';
+    _partialWords = '';
+    if (Platform.isWindows) {
+      _windowsSpeechService.clearLastWords();
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       notifyListeners();
     });
   }
 
-  void clearLastWords() {
-    if (Platform.isWindows) {
-      _windowsSpeechService.clearLastWords();
-    } else {
-      _lastWords = '';
-      _partialWords = '';
-      Future.delayed(Duration.zero, () {
-        notifyListeners();
-      });
-    }
-  }
-
   Future<bool> initialize() async {
     try {
+      debugPrint('Initializing speech recognition...');
+
+      // No Windows, usar diretamente o serviço nativo
       if (Platform.isWindows) {
-        // Usar Windows Speech Service no desktop
+        debugPrint('Using Windows native speech service directly');
         _isInitialized = await _windowsSpeechService.initialize();
-        debugPrint('Initialized Windows Speech Service: $_isInitialized');
-        Future.delayed(Duration.zero, () {
-          notifyListeners();
-        });
-        return _isInitialized;
-      } else {
-        // Request microphone permission
-        final microphonePermission = await Permission.microphone.request();
-        if (microphonePermission != PermissionStatus.granted) {
-          throw Exception('Microphone permission not granted');
-        }
-
-        // Initialize speech to text
-        _isInitialized = await _speechToText.initialize(
-          onError: (error) {
-            debugPrint('Speech recognition error: ${error.errorMsg}');
-            _stopListening();
-          },
-          onStatus: (status) {
-            debugPrint('Speech recognition status: $status');
-            if (status == 'done' || status == 'notListening') {
-              _stopListening();
-            }
-          },
-        );
-
-        Future.delayed(Duration.zero, () {
-          notifyListeners();
-        });
+        debugPrint('Windows speech service initialized: $_isInitialized');
+        notifyListeners();
         return _isInitialized;
       }
+
+      // Para outras plataformas, usar speech_to_text
+      debugPrint('Requesting microphone permission...');
+      final microphonePermission = await Permission.microphone.request();
+      debugPrint('Microphone permission status: $microphonePermission');
+
+      if (microphonePermission != PermissionStatus.granted) {
+        debugPrint('Microphone permission denied');
+        throw Exception('Microphone permission not granted');
+      }
+
+      // Check if speech recognition is available
+      bool available = await _speechToText.initialize(
+        onError: (error) {
+          debugPrint('Speech recognition error: ${error.errorMsg}');
+          _stopListening();
+        },
+        onStatus: (status) {
+          debugPrint('Speech recognition status: $status');
+          if (status == 'done' || status == 'notListening') {
+            debugPrint('Speech recognition completed, stopping...');
+            _stopListening();
+          }
+        },
+      );
+
+      _isInitialized = available;
+      debugPrint('Speech Recognition initialized: $_isInitialized');
+      notifyListeners();
+      return _isInitialized;
     } catch (e) {
       debugPrint('Error initializing speech recognition: $e');
       return false;
@@ -92,77 +114,100 @@ class WhisperService extends ChangeNotifier {
   }
 
   Future<void> startListening() async {
+    debugPrint('WhisperService.startListening() called');
+
     if (!_isInitialized) {
+      debugPrint('Service not initialized, initializing...');
       await initialize();
     }
 
-    if (_isInitialized) {
-      if (Platform.isWindows) {
-        // Usar Windows Speech Service
-        await _windowsSpeechService.startListening();
+    if (!_isInitialized) {
+      debugPrint('Failed to initialize service');
+      return;
+    }
+
+    // No Windows, usar apenas o serviço nativo
+    if (Platform.isWindows) {
+      debugPrint('Using Windows native speech service');
+      await _windowsSpeechService.startListening();
+      return;
+    }
+
+    // Para outras plataformas, usar speech_to_text
+    try {
+      if (_speechToText.isAvailable) {
+        debugPrint('Using speech_to_text for recognition');
+        await _startSpeechToText();
       } else {
-        // Usar speech_to_text para outras plataformas
-        if (!_isListening) {
-          _isListening = true;
-          _lastWords = '';
-          _partialWords = '';
-          _confidence = 0.0;
-          Future.delayed(Duration.zero, () {
-            notifyListeners();
-          });
-
-          await _speechToText.listen(
-            onResult: (result) {
-              debugPrint(
-                'Speech result: "${result.recognizedWords}", final: ${result.finalResult}',
-              );
-              if (result.finalResult) {
-                _lastWords = result.recognizedWords;
-                _partialWords = '';
-                _confidence = result.confidence;
-                debugPrint(
-                  'Final result set: "$_lastWords", notifying listeners...',
-                );
-                Future.delayed(Duration.zero, () {
-                  notifyListeners();
-                });
-              } else {
-                _partialWords = result.recognizedWords;
-                debugPrint('Partial result: "$_partialWords"');
-                Future.delayed(Duration.zero, () {
-                  notifyListeners();
-                });
-              }
-            },
-            listenFor: const Duration(seconds: 10),
-            pauseFor: const Duration(seconds: 2),
-            listenOptions: SpeechListenOptions(
-              partialResults: true,
-              onDevice: false,
-              cancelOnError: false,
-            ),
-            onSoundLevelChange: (level) {
-              // Handle sound level changes for visualization
-            },
-          );
-
-          // Auto-stop after 10 seconds
-          _listeningTimer = Timer(const Duration(seconds: 10), () {
-            if (_isListening) {
-              stopListening();
-            }
-          });
-        }
+        debugPrint('No speech recognition available');
       }
+    } catch (e) {
+      debugPrint('Error in startListening: $e');
+    }
+  }
+
+  Future<void> _startSpeechToText() async {
+    if (!_isListening) {
+      _isListening = true;
+      _lastWords = '';
+      _partialWords = '';
+      _confidence = 0.0;
+      Future.delayed(Duration.zero, () {
+        notifyListeners();
+      });
+
+      await _speechToText.listen(
+        onResult: (result) {
+          debugPrint(
+            'Speech result: "${result.recognizedWords}", final: ${result.finalResult}',
+          );
+          if (result.finalResult) {
+            _lastWords = result.recognizedWords;
+            _partialWords = '';
+            _confidence = result.confidence;
+            debugPrint(
+              'Final result set: "$_lastWords", notifying listeners...',
+            );
+            Future.delayed(Duration.zero, () {
+              notifyListeners();
+            });
+          } else {
+            _partialWords = result.recognizedWords;
+            debugPrint('Partial result: "$_partialWords"');
+            Future.delayed(Duration.zero, () {
+              notifyListeners();
+            });
+          }
+        },
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 3),
+        listenOptions: SpeechListenOptions(
+          partialResults: true,
+          onDevice: false,
+          cancelOnError: false,
+        ),
+        onSoundLevelChange: (level) {
+          // Handle sound level changes for visualization
+        },
+      );
+
+      // Auto-stop após 30 segundos
+      _listeningTimer = Timer(const Duration(seconds: 30), () {
+        if (_isListening) {
+          stopListening();
+        }
+      });
     }
   }
 
   Future<void> stopListening() async {
+    if (_speechToText.isAvailable && _speechToText.isListening) {
+      await _speechToText.stop();
+    }
     if (Platform.isWindows) {
       await _windowsSpeechService.stopListening();
-    } else {
-      _stopListening();
     }
+    _stopListening();
   }
 
   void _stopListening() {
@@ -192,8 +237,10 @@ class WhisperService extends ChangeNotifier {
   @override
   void dispose() {
     _stopListening();
-    _windowsSpeechService.removeListener(_onWindowsSpeechUpdate);
-    _windowsSpeechService.dispose();
+    if (Platform.isWindows) {
+      _windowsSpeechService.removeListener(_onWindowsSpeechUpdate);
+      _windowsSpeechService.dispose();
+    }
     super.dispose();
   }
 }

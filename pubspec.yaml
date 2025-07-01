@@ -63,6 +63,10 @@ dependencies:
   # Permissions
   permission_handler: ^11.1.0
   
+  # Windows native APIs
+  win32: ^5.1.1
+  ffi: ^2.1.0
+  
   # JSON handling
   json_annotation: ^4.8.1
   
