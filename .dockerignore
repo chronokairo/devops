@@ -1,0 +1,25 @@
+# Build artifacts
+node_modules
+.next
+out
+dist
+
+# Local env
+.env
+.env.local
+.env.*.local
+.audit.log
+
+# Editor / OS
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Tests
+coverage
+playwright-report
+
+# Git
+.git
+.github

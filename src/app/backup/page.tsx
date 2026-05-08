@@ -42,10 +42,37 @@ const statusStyle: Record<string, [string, string]> = {
 export default function Page() {
   const { jobs, restores, loading, error, refetch } = useBackup();
   const [tab, setTab] = useState<'jobs' | 'restores'>('jobs');
+  const [restoring, setRestoring] = useState<string | null>(null);
+  const [restoreMsg, setRestoreMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   const typedJobs = jobs as BackupJob[];
   const typedRestores = restores as BackupRestore[];
   const successJobs = typedJobs.filter((j) => j.status === 'success').length;
+
+  async function handleRestore(r: BackupRestore, idx: number) {
+    const id = r.id || `${r.job}-${idx}`;
+    if (!confirm(`Restaurar "${r.job}" do ponto ${r.date}?`)) return;
+    setRestoring(id);
+    setRestoreMsg(null);
+    try {
+      const res = await fetch('/api/backup/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restoreId: id, job: r.job }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setRestoreMsg({ kind: 'err', text: data.error || `HTTP ${res.status}` });
+      } else {
+        setRestoreMsg({ kind: 'ok', text: `Restauracao de "${r.job}" iniciada.` });
+        refetch();
+      }
+    } catch (e) {
+      setRestoreMsg({ kind: 'err', text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setRestoring(null);
+    }
+  }
 
   return (
     <>
@@ -101,6 +128,12 @@ export default function Page() {
                 Pontos de Restore
               </button>
             </div>
+
+            {restoreMsg && (
+              <div className="card" style={{ padding: 12, marginBottom: 16, borderColor: restoreMsg.kind === 'ok' ? '#22c55e' : '#ef4444' }}>
+                <p style={{ margin: 0, fontSize: 12, color: restoreMsg.kind === 'ok' ? '#22c55e' : '#ef4444' }}>{restoreMsg.text}</p>
+              </div>
+            )}
 
             {tab === 'jobs' && (
               <div className="card" style={{ padding: 0 }}>
@@ -177,7 +210,13 @@ export default function Page() {
                           <td><span className="badge badge-green">● {r.status || 'available'}</span></td>
                           <td style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>{r.age || '—'}</td>
                           <td>
-                            <button className="btn-sm">Restaurar</button>
+                            <button
+                              className="btn-sm"
+                              disabled={restoring === (r.id || `${r.job}-${i}`)}
+                              onClick={() => handleRestore(r, i)}
+                            >
+                              {restoring === (r.id || `${r.job}-${i}`) ? 'Restaurando...' : 'Restaurar'}
+                            </button>
                           </td>
                         </tr>
                       ))}

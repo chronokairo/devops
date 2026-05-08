@@ -52,6 +52,10 @@ function WorkflowsTab() {
   const [loading, setLoading]     = useState(false);
   const [err, setErr]             = useState('');
   const [selectedWf, setSelectedWf] = useState<number | 'all'>('all');
+  const [dispatching, setDispatching] = useState(false);
+  const [dispatchRef, setDispatchRef] = useState('main');
+  const [actionMsg, setActionMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setErr('');
@@ -68,6 +72,57 @@ function WorkflowsTab() {
 
   useEffect(() => { load(); }, [load]);
 
+  async function dispatchSelected() {
+    if (selectedWf === 'all') {
+      setActionMsg({ kind: 'err', text: 'Escolha um workflow especifico para executar.' });
+      return;
+    }
+    setDispatching(true);
+    setActionMsg(null);
+    try {
+      const res = await fetch('/api/cicd/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workflow_id: selectedWf, ref: dispatchRef || 'main' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setActionMsg({ kind: 'err', text: data.error || `HTTP ${res.status}` });
+      } else {
+        setActionMsg({ kind: 'ok', text: `Workflow disparado em ${dispatchRef || 'main'}.` });
+        setTimeout(load, 1500);
+      }
+    } catch (e) {
+      setActionMsg({ kind: 'err', text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setDispatching(false);
+    }
+  }
+
+  async function cancelRun(runId: number) {
+    if (!confirm(`Cancelar run #${runId}?`)) return;
+    setCancellingId(runId);
+    setActionMsg(null);
+    try {
+      const res = await fetch('/api/cicd/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ run_id: runId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setActionMsg({ kind: 'err', text: data.error || `HTTP ${res.status}` });
+      } else {
+        setActionMsg({ kind: 'ok', text: `Cancelamento solicitado para run #${runId}.` });
+        setTimeout(load, 1500);
+      }
+    } catch (e) {
+      setActionMsg({ kind: 'err', text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setCancellingId(null);
+    }
+  }
+
   const visibleRuns = selectedWf === 'all' ? runs : runs.filter(r => r.workflow_id === selectedWf);
 
   return (
@@ -79,19 +134,41 @@ function WorkflowsTab() {
             <option value="all">Todos ({runs.length} runs)</option>
             {workflows.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
+          <span style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>ref</span>
+          <input
+            className="form-input"
+            style={{ width: 140 }}
+            value={dispatchRef}
+            onChange={e => setDispatchRef(e.target.value)}
+            placeholder="main"
+          />
+          <button
+            className="btn-primary"
+            onClick={dispatchSelected}
+            disabled={dispatching || selectedWf === 'all'}
+            style={{ fontSize: 12 }}
+            title={selectedWf === 'all' ? 'Escolha um workflow para executar' : 'Disparar workflow_dispatch'}
+          >
+            {dispatching ? 'Executando...' : '▶ Run'}
+          </button>
           <button className="btn-ghost" onClick={load} disabled={loading} style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto', fontSize: 12 }}>
             {loading && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>}
             Atualizar
           </button>
         </div>
         {err && <p className="modal-error" style={{ margin: '8px 0 0' }}>{err}</p>}
+        {actionMsg && (
+          <p style={{ margin: '8px 0 0', fontSize: 12, color: actionMsg.kind === 'ok' ? '#22c55e' : '#ef4444' }}>
+            {actionMsg.text}
+          </p>
+        )}
       </div>
 
       {visibleRuns.length > 0 ? (
         <div className="card" style={{ padding: 0 }}>
           <table className="table">
             <thead>
-              <tr><th>#</th><th>Nome</th><th>Branch</th><th>Evento</th><th>Status</th><th>Duração</th><th>Há</th><th>Actor</th></tr>
+              <tr><th>#</th><th>Nome</th><th>Branch</th><th>Evento</th><th>Status</th><th>Duração</th><th>Há</th><th>Actor</th><th></th></tr>
             </thead>
             <tbody>
               {visibleRuns.map(r => (
@@ -106,6 +183,17 @@ function WorkflowsTab() {
                   <td style={{ fontSize: 12 }}>{fmtDur(r.duration)}</td>
                   <td style={{ fontSize: 11, color: 'var(--color-neutral-400)' }}>{timeAgo(r.updated_at)}</td>
                   <td style={{ fontSize: 11 }}>{r.actor}</td>
+                  <td>
+                    {(r.status === 'in_progress' || r.status === 'queued') && (
+                      <button
+                        className="btn-sm"
+                        disabled={cancellingId === r.id}
+                        onClick={() => cancelRun(r.id)}
+                      >
+                        {cancellingId === r.id ? '...' : '⊘ Cancel'}
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
