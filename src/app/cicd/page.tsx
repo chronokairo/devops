@@ -1,212 +1,250 @@
 'use client';
-import { useState } from 'react';
-import { useCICD } from '@/features/hooks/useCICD';
+import { useState, useEffect, useCallback } from 'react';
 
-function Loading() {
+// ── Types ──────────────────────────────────────────────────────────
+interface Workflow {
+  id: number; name: string; state: string; path: string; html_url: string;
+}
+interface WorkflowRun {
+  id: number; name: string; workflow_id: number; branch: string; sha: string;
+  status: string; conclusion: string | null; html_url: string; created_at: string;
+  updated_at: string; run_number: number; actor: string; event: string; duration: number | null;
+}
+interface WebhookEvent {
+  id: string; event: string; action?: string; repo?: string; sender?: string;
+  ref?: string; headSha?: string; conclusion?: string; receivedAt: number;
+  payload: Record<string, unknown>;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────
+function timeAgo(iso: string) {
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return `${s}s atrás`;
+  if (s < 3600) return `${Math.floor(s / 60)}min atrás`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h atrás`;
+  return `${Math.floor(s / 86400)}d atrás`;
+}
+function tsAgo(ts: number) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return `${s}s atrás`;
+  if (s < 3600) return `${Math.floor(s / 60)}min atrás`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h atrás`;
+  return `${Math.floor(s / 86400)}d atrás`;
+}
+function fmtDur(sec: number | null) {
+  if (!sec) return '—';
+  return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m${sec % 60}s`;
+}
+
+function ConclusionBadge({ status, conclusion }: { status: string; conclusion: string | null }) {
+  if (status === 'in_progress' || status === 'queued') return <span className="badge badge-yellow">▶ {status}</span>;
+  if (conclusion === 'success')    return <span className="badge badge-green">✓ sucesso</span>;
+  if (conclusion === 'failure')    return <span className="badge badge-red">✕ falha</span>;
+  if (conclusion === 'cancelled')  return <span className="badge badge-gray">⊘ cancelado</span>;
+  if (conclusion === 'skipped')    return <span className="badge badge-gray">— skipped</span>;
+  return <span className="badge badge-gray">{conclusion || status}</span>;
+}
+
+// ── Workflows/Runs tab ─────────────────────────────────────────────
+function WorkflowsTab() {
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [runs, setRuns]           = useState<WorkflowRun[]>([]);
+  const [loading, setLoading]     = useState(false);
+  const [err, setErr]             = useState('');
+  const [selectedWf, setSelectedWf] = useState<number | 'all'>('all');
+
+  const load = useCallback(async () => {
+    setLoading(true); setErr('');
+    try {
+      const r = await fetch('/api/cicd');
+      const data = await r.json();
+      if (data.error && !data.workflows?.length) { setErr(data.error); }
+      else if (data.error) { setErr(data.error); }
+      setWorkflows(data.workflows || []);
+      setRuns(data.runs || []);
+    } catch (e) { setErr(String(e)); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const visibleRuns = selectedWf === 'all' ? runs : runs.filter(r => r.workflow_id === selectedWf);
+
   return (
-    <div className="card" style={{ textAlign: 'center', padding: 40 }}>
-      <p style={{ margin: 0, color: 'var(--color-neutral-400)', fontSize: 13 }}>Carregando...</p>
-    </div>
-  );
-}
-
-function ErrorState({ message }: { message: string }) {
-  return (
-    <div className="card" style={{ padding: 32 }}>
-      <p style={{ margin: '0 0 8px', fontWeight: 600, fontSize: 14 }}>Nao configurado</p>
-      <p style={{ margin: 0, color: 'var(--color-neutral-500)', fontSize: 13 }}>{message}</p>
-    </div>
-  );
-}
-
-function statusClass(status: string, conclusion: string | null) {
-  if (status === 'completed') {
-    if (conclusion === 'success') return 'badge badge-green';
-    if (conclusion === 'failure') return 'badge badge-red';
-    if (conclusion === 'cancelled') return 'badge badge-gray';
-    return 'badge badge-yellow';
-  }
-  if (status === 'in_progress') return 'badge badge-blue';
-  if (status === 'queued') return 'badge badge-yellow';
-  return 'badge badge-gray';
-}
-
-function statusLabel(status: string, conclusion: string | null) {
-  if (status === 'completed') return conclusion || 'completed';
-  return status.replace('_', ' ');
-}
-
-function fmtDuration(seconds: number | null) {
-  if (seconds == null) return '-';
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return m > 0 ? `${m}m ${s}s` : `${s}s`;
-}
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-}
-
-const TABS = ['Execucoes', 'Workflows'] as const;
-type Tab = (typeof TABS)[number];
-
-export default function CICDPage() {
-  const { workflows, runs, loading, error, refetch } = useCICD();
-  const [tab, setTab] = useState<Tab>('Execucoes');
-  const [filter, setFilter] = useState('all');
-
-  const filteredRuns =
-    filter === 'all'
-      ? runs
-      : runs.filter((r) =>
-          filter === 'in_progress'
-            ? r.status === 'in_progress' || r.status === 'queued'
-            : r.conclusion === filter,
-        );
-
-  return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700 }}>CI/CD</h1>
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--color-neutral-500)' }}>
-            Workflows e execucoes do GitHub Actions
-          </p>
-        </div>
-        <button className="btn-primary" onClick={refetch} disabled={loading}>
-          {loading ? 'Atualizando...' : 'Atualizar'}
-        </button>
-      </div>
-
-      {!loading && !error && (
-        <div className="grid-4" style={{ marginBottom: 24 }}>
-          <div className="card">
-            <p style={{ margin: '0 0 4px', fontSize: 12, color: 'var(--color-neutral-500)' }}>Workflows</p>
-            <p style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>{workflows.length}</p>
-          </div>
-          <div className="card">
-            <p style={{ margin: '0 0 4px', fontSize: 12, color: 'var(--color-neutral-500)' }}>Execucoes</p>
-            <p style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>{runs.length}</p>
-          </div>
-          <div className="card">
-            <p style={{ margin: '0 0 4px', fontSize: 12, color: 'var(--color-neutral-500)' }}>Em execucao</p>
-            <p style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>
-              {runs.filter((r) => r.status === 'in_progress').length}
-            </p>
-          </div>
-          <div className="card">
-            <p style={{ margin: '0 0 4px', fontSize: 12, color: 'var(--color-neutral-500)' }}>Falhas</p>
-            <p style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--color-red-600)' }}>
-              {runs.filter((r) => r.conclusion === 'failure').length}
-            </p>
-          </div>
-        </div>
-      )}
-
-      <div className="tab-bar" style={{ marginBottom: 16 }}>
-        {TABS.map((t) => (
-          <button key={t} className={`tab${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>
-            {t}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="card" style={{ padding: '10px 14px' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, fontWeight: 500 }}>Workflow</span>
+          <select className="form-input" style={{ width: 260 }} value={selectedWf} onChange={e => setSelectedWf(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
+            <option value="all">Todos ({runs.length} runs)</option>
+            {workflows.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+          </select>
+          <button className="btn-ghost" onClick={load} disabled={loading} style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto', fontSize: 12 }}>
+            {loading && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>}
+            Atualizar
           </button>
-        ))}
+        </div>
+        {err && <p className="modal-error" style={{ margin: '8px 0 0' }}>{err}</p>}
       </div>
 
-      {loading && <Loading />}
-      {!loading && error && <ErrorState message={error} />}
-
-      {!loading && !error && tab === 'Execucoes' && (
-        <div className="card">
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-            {['all', 'success', 'failure', 'in_progress', 'cancelled'].map((f) => (
-              <button
-                key={f}
-                className={`tab${filter === f ? ' active' : ''}`}
-                style={{ padding: '4px 12px', fontSize: 12 }}
-                onClick={() => setFilter(f)}
-              >
-                {f === 'all' ? 'Todos' : f.replace('_', ' ')}
-              </button>
-            ))}
+      {visibleRuns.length > 0 ? (
+        <div className="card" style={{ padding: 0 }}>
+          <table className="table">
+            <thead>
+              <tr><th>#</th><th>Nome</th><th>Branch</th><th>Evento</th><th>Status</th><th>Duração</th><th>Há</th><th>Actor</th></tr>
+            </thead>
+            <tbody>
+              {visibleRuns.map(r => (
+                <tr key={r.id}>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-neutral-400)' }}>#{r.run_number}</td>
+                  <td>
+                    <a href={r.html_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--color-accent)', textDecoration: 'none' }}>{r.name}</a>
+                  </td>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{r.branch}</td>
+                  <td><span className="badge badge-gray" style={{ fontSize: 10 }}>{r.event}</span></td>
+                  <td><ConclusionBadge status={r.status} conclusion={r.conclusion} /></td>
+                  <td style={{ fontSize: 12 }}>{fmtDur(r.duration)}</td>
+                  <td style={{ fontSize: 11, color: 'var(--color-neutral-400)' }}>{timeAgo(r.updated_at)}</td>
+                  <td style={{ fontSize: 11 }}>{r.actor}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        !loading && (
+          <div className="empty-state">
+            <p>{err ? 'Configure GITHUB_TOKEN e GITHUB_REPO no ambiente' : 'Nenhum run encontrado'}</p>
           </div>
-          {filteredRuns.length === 0 ? (
-            <p style={{ margin: 0, color: 'var(--color-neutral-400)', fontSize: 13 }}>Nenhuma execucao encontrada.</p>
-          ) : (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Workflow</th>
-                  <th>Branch</th>
-                  <th>Gatilho</th>
-                  <th>Status</th>
-                  <th>Duracao</th>
-                  <th>Data</th>
-                  <th>Autor</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRuns.map((r) => (
-                  <tr key={r.id}>
-                    <td>
-                      <a href={r.html_url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-blue-600)', fontFamily: 'monospace' }}>
-                        #{r.run_number}
-                      </a>
-                    </td>
-                    <td style={{ fontWeight: 500 }}>{r.name}</td>
-                    <td><code style={{ fontSize: 11 }}>{r.branch}</code></td>
-                    <td>{r.event}</td>
-                    <td>
-                      <span className={statusClass(r.status, r.conclusion)}>
-                        {statusLabel(r.status, r.conclusion)}
-                      </span>
-                    </td>
-                    <td>{fmtDuration(r.duration)}</td>
-                    <td style={{ fontSize: 12 }}>{fmtDate(r.created_at)}</td>
-                    <td>{r.actor}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-
-      {!loading && !error && tab === 'Workflows' && (
-        <div className="card">
-          {workflows.length === 0 ? (
-            <p style={{ margin: 0, color: 'var(--color-neutral-400)', fontSize: 13 }}>Nenhum workflow encontrado.</p>
-          ) : (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Nome</th>
-                  <th>Arquivo</th>
-                  <th>Estado</th>
-                  <th>Atualizado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {workflows.map((w) => (
-                  <tr key={w.id}>
-                    <td style={{ fontWeight: 500 }}>
-                      <a href={w.html_url} target="_blank" rel="noreferrer" style={{ color: 'var(--color-blue-600)' }}>
-                        {w.name}
-                      </a>
-                    </td>
-                    <td><code style={{ fontSize: 11 }}>{w.path}</code></td>
-                    <td>
-                      <span className={w.state === 'active' ? 'badge badge-green' : 'badge badge-gray'}>
-                        {w.state}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: 12 }}>{fmtDate(w.updated_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+        )
       )}
     </div>
+  );
+}
+
+// ── Webhooks tab ───────────────────────────────────────────────────
+function eventColor(event: string) {
+  if (event === 'push')              return '#3b82f6';
+  if (event === 'pull_request')      return '#8b5cf6';
+  if (event === 'workflow_run')      return '#f59e0b';
+  if (event === 'release')           return '#10b981';
+  if (event.startsWith('issue'))     return '#ef4444';
+  return 'var(--color-neutral-400)';
+}
+
+function WebhooksTab() {
+  const [events, setEvents] = useState<WebhookEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<WebhookEvent | null>(null);
+  const [showSetup, setShowSetup] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch('/api/webhooks/github/events');
+      const data = await r.json();
+      setEvents(Array.isArray(data) ? data : []);
+    } catch {}
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const webhookUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/api/webhooks/github`
+    : '/api/webhooks/github';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="card" style={{ padding: '10px 14px' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <span style={{ fontSize: 12, fontWeight: 500 }}>{events.length} evento{events.length !== 1 ? 's' : ''} recebido{events.length !== 1 ? 's' : ''}</span>
+          <button className="btn-ghost" onClick={() => setShowSetup(s => !s)} style={{ fontSize: 12 }}>
+            {showSetup ? '▲ Ocultar config' : '▼ Como configurar'}
+          </button>
+          <button className="btn-ghost" onClick={load} disabled={loading} style={{ marginLeft: 'auto', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+            {loading && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>}
+            Atualizar
+          </button>
+        </div>
+
+        {showSetup && (
+          <div style={{ marginTop: 12, padding: 12, background: 'var(--color-muted)', borderRadius: 8, fontSize: 12 }}>
+            <p style={{ fontWeight: 600, marginBottom: 8 }}>Configurar webhook no GitHub</p>
+            <ol style={{ paddingLeft: 18, lineHeight: 2.2, margin: 0 }}>
+              <li>Acesse <strong>Settings → Webhooks → Add webhook</strong> no seu repositório</li>
+              <li>Payload URL: <code style={{ background: 'var(--color-bg)', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 11 }}>{webhookUrl}</code></li>
+              <li>Content type: <strong>application/json</strong></li>
+              <li>Secret (opcional): defina a variável de ambiente <code style={{ background: 'var(--color-bg)', padding: '2px 4px', borderRadius: 4 }}>GITHUB_WEBHOOK_SECRET</code></li>
+              <li>Events: selecione os que desejar</li>
+            </ol>
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 380px' : '1fr', gap: 16 }}>
+        {events.length > 0 ? (
+          <div className="card" style={{ padding: 0 }}>
+            <table className="table">
+              <thead>
+                <tr><th>Evento</th><th>Ação</th><th>Repositório</th><th>Ref</th><th>Sender</th><th>Recebido</th></tr>
+              </thead>
+              <tbody>
+                {events.map(e => (
+                  <tr key={e.id} onClick={() => setSelected(s => s?.id === e.id ? null : e)} style={{ cursor: 'pointer', background: selected?.id === e.id ? 'var(--color-muted)' : undefined }}>
+                    <td><span className="badge" style={{ background: eventColor(e.event) + '22', color: eventColor(e.event), borderColor: eventColor(e.event) + '44' }}>{e.event}</span></td>
+                    <td style={{ fontSize: 11 }}>{e.action || '—'}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{e.repo || '—'}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{e.ref ? e.ref.replace('refs/heads/', '') : '—'}</td>
+                    <td style={{ fontSize: 11 }}>{e.sender || '—'}</td>
+                    <td style={{ fontSize: 11, color: 'var(--color-neutral-400)' }}>{tsAgo(e.receivedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="empty-state">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+            <p>Nenhum evento recebido</p>
+            <p style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>Configure o webhook acima para começar a receber eventos</p>
+          </div>
+        )}
+
+        {selected && (
+          <div className="card" style={{ padding: 0, alignSelf: 'start' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--color-border)' }}>
+              <span style={{ fontWeight: 600, fontSize: 13 }}>Payload</span>
+              <span className="badge" style={{ fontSize: 10 }}>{selected.event}</span>
+              <button className="modal-close" style={{ marginLeft: 'auto' }} onClick={() => setSelected(null)}>✕</button>
+            </div>
+            <pre style={{ margin: 0, padding: 12, fontSize: 10, fontFamily: 'var(--font-mono)', lineHeight: 1.6, background: 'var(--color-bg-tertiary)', maxHeight: 480, overflow: 'auto', borderRadius: '0 0 8px 8px', whiteSpace: 'pre-wrap' }}>
+              {JSON.stringify(selected.payload, null, 2)}
+            </pre>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Page ───────────────────────────────────────────────────────────
+export default function Page() {
+  const [tab, setTab] = useState<'workflows' | 'webhooks'>('workflows');
+  return (
+    <>
+      <div className="page-header">
+        <h1 className="page-title">CI / CD</h1>
+        <p className="page-subtitle">Workflows do GitHub Actions e eventos de webhook</p>
+      </div>
+      <div className="page-content">
+        <div className="tab-bar">
+          <button className={`tab ${tab === 'workflows' ? 'active' : ''}`} onClick={() => setTab('workflows')}>Workflows</button>
+          <button className={`tab ${tab === 'webhooks'  ? 'active' : ''}`} onClick={() => setTab('webhooks')}>Webhooks</button>
+        </div>
+        {tab === 'workflows' && <WorkflowsTab />}
+        {tab === 'webhooks'  && <WebhooksTab />}
+      </div>
+    </>
   );
 }

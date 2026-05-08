@@ -1,168 +1,175 @@
 'use client';
-import { useState } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
-const LOG_LEVELS = ['ERROR', 'WARN', 'INFO', 'DEBUG'] as const;
+interface ManualServer {
+  id: string; label: string; host: string; port: string; user: string;
+  sshKey?: string; sshKeyName?: string;
+}
 
-const LOGS = [
-  { ts: '2026-05-08T14:32:01Z', level: 'ERROR', service: 'webhook-processor', msg: 'Failed to deliver webhook to https://hooks.example.com/events: connection timeout after 30s', trace: 'trace-abc123' },
-  { ts: '2026-05-08T14:31:55Z', level: 'WARN', service: 'worker-queue', msg: 'Queue depth exceeded warning threshold: 215 items pending (threshold: 200)', trace: null },
-  { ts: '2026-05-08T14:31:50Z', level: 'INFO', service: 'api-server', msg: 'POST /api/v1/transactions 201 Created 42ms user=usr_7f8a9b req=req_k2m4n6', trace: 'trace-def456' },
-  { ts: '2026-05-08T14:31:48Z', level: 'INFO', service: 'auth-service', msg: 'JWT validated successfully uid=usr_7f8a9b ip=177.12.34.56', trace: 'trace-def456' },
-  { ts: '2026-05-08T14:31:45Z', level: 'ERROR', service: 'webhook-processor', msg: 'Retry 3/3 failed for webhook wh_xk9m2p — moving to dead letter queue', trace: 'trace-abc123' },
-  { ts: '2026-05-08T14:31:40Z', level: 'WARN', service: 'db-primary', msg: 'Slow query detected (1240ms): SELECT * FROM transactions WHERE org_id=$1 ORDER BY created_at DESC LIMIT 100', trace: null },
-  { ts: '2026-05-08T14:31:35Z', level: 'INFO', service: 'api-server', msg: 'GET /api/v1/dashboard 200 OK 18ms user=usr_3a2b1c', trace: 'trace-ghi789' },
-  { ts: '2026-05-08T14:31:30Z', level: 'DEBUG', service: 'redis-cache', msg: 'Cache hit for key=sess:usr_7f8a9b:dashboard ttl=284s', trace: null },
-  { ts: '2026-05-08T14:31:25Z', level: 'INFO', service: 'worker-queue', msg: 'Job processed: send_invoice job_id=job_m7n8o9 duration=342ms', trace: null },
-  { ts: '2026-05-08T14:31:20Z', level: 'INFO', service: 'api-server', msg: 'POST /api/v1/invoices 201 Created 89ms user=usr_5e6f7g', trace: 'trace-jkl012' },
+function useLocalServers() {
+  const [servers, setServers] = useState<ManualServer[]>([]);
+  useEffect(() => {
+    try { const s = localStorage.getItem('devops:manual-servers'); if (s) setServers(JSON.parse(s)); } catch {}
+  }, []);
+  return servers;
+}
+
+const LOG_PRESETS = [
+  { label: 'journalctl (sistema)',       cmd: 'journalctl -n 500 --no-pager 2>&1' },
+  { label: 'journalctl -f (stream)',     cmd: 'journalctl -f -n 50 2>&1',          stream: true },
+  { label: '/var/log/syslog',            cmd: 'tail -n 500 /var/log/syslog 2>&1' },
+  { label: '/var/log/syslog -f',        cmd: 'tail -f -n 50 /var/log/syslog 2>&1', stream: true },
+  { label: '/var/log/auth.log',          cmd: 'tail -n 500 /var/log/auth.log 2>&1' },
+  { label: '/var/log/nginx/access.log',  cmd: 'tail -n 500 /var/log/nginx/access.log 2>&1' },
+  { label: '/var/log/nginx/error.log',   cmd: 'tail -n 500 /var/log/nginx/error.log 2>&1' },
+  { label: 'dmesg',                      cmd: 'dmesg --time-format=iso 2>&1 | tail -200' },
+  { label: 'Personalizado',              cmd: '', custom: true },
 ];
-
-const METRICS = [
-  { name: 'Latência P50', value: '42ms', change: '-8ms', trend: 'down-good', service: 'API Gateway' },
-  { name: 'Latência P99', value: '320ms', change: '+40ms', trend: 'up-bad', service: 'API Gateway' },
-  { name: 'Taxa de Erro', value: '0.8%', change: '+0.3%', trend: 'up-bad', service: 'Global' },
-  { name: 'Throughput', value: '4.2k req/min', change: '+200', trend: 'up-good', service: 'API Gateway' },
-  { name: 'DB Connections', value: '38/100', change: '-2', trend: 'down-good', service: 'PostgreSQL' },
-  { name: 'Cache Hit Rate', value: '94%', change: '+2%', trend: 'up-good', service: 'Redis' },
-  { name: 'Queue Depth', value: '215', change: '+80', trend: 'up-bad', service: 'Worker Queue' },
-  { name: 'Disk IOPS', value: '1.2k/s', change: '+100', trend: 'up-neutral', service: 'PostgreSQL' },
-];
-
-const TRACES = [
-  { id: 'trace-def456', op: 'POST /api/v1/transactions', duration: '42ms', spans: 5, status: 'success', ts: '14:31:48' },
-  { id: 'trace-abc123', op: 'webhook.deliver wh_xk9m2p', duration: '30.2s', spans: 8, status: 'error', ts: '14:31:45' },
-  { id: 'trace-ghi789', op: 'GET /api/v1/dashboard', duration: '18ms', spans: 3, status: 'success', ts: '14:31:35' },
-  { id: 'trace-jkl012', op: 'POST /api/v1/invoices', duration: '89ms', spans: 7, status: 'success', ts: '14:31:20' },
-  { id: 'trace-mno345', op: 'job.send_invoice job_m7n8o9', duration: '342ms', spans: 4, status: 'success', ts: '14:31:25' },
-];
-
-const ALERT_RULES = [
-  { name: 'High Error Rate', expr: 'error_rate > 1%', duration: '5m', severity: 'critical', state: 'pending' },
-  { name: 'Webhook Failures', expr: 'webhook_failures > 5', duration: '2m', severity: 'critical', state: 'firing' },
-  { name: 'High Queue Depth', expr: 'queue_depth > 200', duration: '5m', severity: 'warning', state: 'firing' },
-  { name: 'Slow Queries', expr: 'db_query_time_p99 > 1s', duration: '10m', severity: 'warning', state: 'pending' },
-  { name: 'Memory Pressure', expr: 'memory_used_pct > 85%', duration: '10m', severity: 'warning', state: 'inactive' },
-  { name: 'CPU Saturation', expr: 'cpu_used_pct > 90%', duration: '5m', severity: 'critical', state: 'inactive' },
-];
-
-const levelStyle: Record<string, string> = { ERROR: 'badge-red', WARN: 'badge-yellow', INFO: 'badge-blue', DEBUG: 'badge-gray' };
-const trendStyle: Record<string, string> = { 'up-good': '#22c55e', 'down-good': '#22c55e', 'up-bad': '#ef4444', 'down-bad': '#ef4444', 'up-neutral': '#6b7280', 'down-neutral': '#6b7280' };
-const trendArrow: Record<string, string> = { 'up-good': '↑', 'down-good': '↓', 'up-bad': '↑', 'down-bad': '↓', 'up-neutral': '↑', 'down-neutral': '↓' };
-const alertStateStyle: Record<string, string> = { firing: 'badge-red', pending: 'badge-yellow', inactive: 'badge-gray' };
-const severityStyle: Record<string, string> = { critical: 'badge-red', warning: 'badge-yellow', info: 'badge-blue' };
 
 export default function Page() {
-  const [tab, setTab] = useState<'logs' | 'metrics' | 'traces' | 'alerts'>('logs');
-  const [levelFilter, setLevelFilter] = useState<'all' | typeof LOG_LEVELS[number]>('all');
+  const servers = useLocalServers();
+  const [selectedId, setSelectedId] = useState('');
+  const [presetIdx, setPresetIdx]   = useState(0);
+  const [customCmd, setCustomCmd]   = useState('');
+  const [loading, setLoading]       = useState(false);
+  const [streaming, setStreaming]   = useState(false);
+  const [output, setOutput]         = useState('');
+  const [err, setErr]               = useState('');
+  const preRef  = useRef<HTMLPreElement>(null);
+  const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
 
-  const filteredLogs = levelFilter === 'all' ? LOGS : LOGS.filter(l => l.level === levelFilter);
+  const server = servers.find(s => s.id === selectedId);
+  const preset = LOG_PRESETS[presetIdx];
+  const sshBase = server ? { host: server.host, port: server.port || '22', user: server.user, keyContent: server.sshKey } : null;
+
+  useEffect(() => {
+    if (preRef.current) preRef.current.scrollTop = preRef.current.scrollHeight;
+  }, [output]);
+
+  const stopStream = useCallback(() => {
+    readerRef.current?.cancel(); readerRef.current = null; setStreaming(false);
+  }, []);
+
+  const run = useCallback(async () => {
+    if (!sshBase) return;
+    stopStream();
+    const cmd = preset.custom ? customCmd.trim() : preset.cmd;
+    if (!cmd) { setErr('Comando obrigatório'); return; }
+    setErr(''); setOutput('');
+
+    const isStream = preset.stream || false;
+
+    if (!isStream) {
+      setLoading(true);
+      try {
+        const r = await fetch('/api/ssh/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...sshBase, cmd, timeoutMs: 30000 }) });
+        const data = await r.json();
+        if (data.error) { setErr(data.error); return; }
+        setOutput((data.stdout || '') + (data.stderr ? '\n[stderr]\n' + data.stderr : ''));
+      } catch (e) { setErr(String(e)); }
+      finally { setLoading(false); }
+    } else {
+      setStreaming(true);
+      try {
+        const resp = await fetch('/api/ssh/exec/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...sshBase, cmd }) });
+        const reader = resp.body!.getReader();
+        readerRef.current = reader;
+        const dec = new TextDecoder();
+        let buf = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const parts = buf.split('\n\n'); buf = parts.pop() || '';
+          for (const part of parts) {
+            for (const line of part.split('\n')) {
+              if (!line.startsWith('data: ')) continue;
+              try {
+                const d = JSON.parse(line.slice(6));
+                if (d.type === 'data')  setOutput(o => o + d.text);
+                if (d.type === 'close') { readerRef.current = null; setStreaming(false); }
+              } catch {}
+            }
+          }
+        }
+      } catch { /* reader cancelled */ }
+      setStreaming(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, presetIdx, customCmd]);
 
   return (
     <>
       <div className="page-header">
         <h1 className="page-title">Observabilidade</h1>
-        <p className="page-subtitle">Logs, métricas, traces e alertas de todos os serviços</p>
+        <p className="page-subtitle">Visualize logs de servidores via SSH em tempo real</p>
       </div>
       <div className="page-content">
-        <div className="grid-4" style={{ marginBottom: 24 }}>
-          <div className="card stat"><p className="stat-value" style={{ color: '#ef4444' }}>{LOGS.filter(l => l.level === 'ERROR').length}</p><p className="stat-label">Erros (último 5min)</p></div>
-          <div className="card stat"><p className="stat-value">42ms</p><p className="stat-label">Latência P50</p></div>
-          <div className="card stat"><p className="stat-value" style={{ color: '#ef4444' }}>{ALERT_RULES.filter(a => a.state === 'firing').length}</p><p className="stat-label">Alertas Disparados</p></div>
-          <div className="card stat"><p className="stat-value">{TRACES.length}</p><p className="stat-label">Traces Recentes</p></div>
-        </div>
-
-        <div className="tab-bar">
-          <button className={`tab ${tab === 'logs' ? 'active' : ''}`} onClick={() => setTab('logs')}>Logs</button>
-          <button className={`tab ${tab === 'metrics' ? 'active' : ''}`} onClick={() => setTab('metrics')}>Métricas</button>
-          <button className={`tab ${tab === 'traces' ? 'active' : ''}`} onClick={() => setTab('traces')}>Traces</button>
-          <button className={`tab ${tab === 'alerts' ? 'active' : ''}`} onClick={() => setTab('alerts')}>Regras de Alerta</button>
-        </div>
-
-        {tab === 'logs' && (
-          <>
-            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-              {(['all', ...LOG_LEVELS] as const).map(l => (
-                <button key={l} onClick={() => setLevelFilter(l)}
-                  style={{ cursor: 'pointer', border: 'none', borderRadius: 9999, padding: '2px 10px', fontSize: 11, fontWeight: 500,
-                    background: levelFilter === l ? '#000' : 'var(--color-muted)', color: levelFilter === l ? '#fff' : 'var(--color-neutral-600)' }}>
-                  {l === 'all' ? 'Todos' : l}
+        <div className="card">
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <label className="form-label">Servidor</label>
+              <select className="form-input" value={selectedId} onChange={e => setSelectedId(e.target.value)}>
+                <option value="">— Selecione —</option>
+                {servers.map(s => <option key={s.id} value={s.id}>{s.label} ({s.host})</option>)}
+              </select>
+            </div>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <label className="form-label">Fonte de log</label>
+              <select className="form-input" value={presetIdx} onChange={e => setPresetIdx(Number(e.target.value))}>
+                {LOG_PRESETS.map((p, i) => <option key={i} value={i}>{p.label}</option>)}
+              </select>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {!streaming ? (
+                <button className="btn-primary" onClick={run} disabled={!server || loading} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {loading && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>}
+                  {preset.stream ? '▶ Iniciar stream' : 'Carregar'}
                 </button>
-              ))}
+              ) : (
+                <button className="btn-ghost" onClick={stopStream} style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#ef4444' }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                  Parar
+                </button>
+              )}
+              {output && <button className="btn-ghost" onClick={() => setOutput('')} style={{ fontSize: 12 }}>Limpar</button>}
             </div>
-            <div className="card" style={{ padding: 0, background: '#0f1117' }}>
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid #1e2230', display: 'flex', gap: 8, alignItems: 'center' }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />
-                <span style={{ fontSize: 11, color: '#6b7280', fontFamily: 'var(--font-mono)' }}>LIVE — stream de logs</span>
-              </div>
-              {filteredLogs.map((l, i) => (
-                <div key={i} className="log-line" style={{ padding: '4px 16px', borderBottom: '1px solid #1a1f2e' }}>
-                  <span style={{ color: '#4b5563', fontFamily: 'var(--font-mono)', fontSize: 11, whiteSpace: 'nowrap' }}>
-                    {new Date(l.ts).toLocaleTimeString('pt-BR')}
-                  </span>
-                  <span className={`badge ${levelStyle[l.level]}`} style={{ fontSize: 10, minWidth: 42, textAlign: 'center' }}>{l.level}</span>
-                  <span style={{ color: '#8b5cf6', fontSize: 11, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>[{l.service}]</span>
-                  <code style={{ color: '#e2e8f0', fontSize: 11, flex: 1, wordBreak: 'break-all' }}>{l.msg}</code>
-                  {l.trace && <span style={{ color: '#374151', fontSize: 10, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{l.trace}</span>}
-                </div>
-              ))}
-            </div>
-          </>
-        )}
+          </div>
 
-        {tab === 'metrics' && (
-          <div className="grid-2">
-            {METRICS.map(m => (
-              <div key={m.name} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-500)' }}>{m.service}</p>
-                  <p style={{ margin: '2px 0 0', fontSize: 13, fontWeight: 600 }}>{m.name}</p>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <p style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>{m.value}</p>
-                  <p style={{ margin: '2px 0 0', fontSize: 11, color: trendStyle[m.trend] }}>
-                    {trendArrow[m.trend]} {m.change}
-                  </p>
-                </div>
-              </div>
-            ))}
+          {preset.custom && (
+            <div style={{ marginTop: 12 }}>
+              <label className="form-label">Comando personalizado</label>
+              <input className="form-input" value={customCmd} onChange={e => setCustomCmd(e.target.value)} placeholder="tail -f /var/log/app.log" onKeyDown={e => e.key === 'Enter' && run()} />
+            </div>
+          )}
+          {err && <p className="modal-error" style={{ margin: '10px 0 0' }}>{err}</p>}
+        </div>
+
+        {(output || streaming) && (
+          <div className="card" style={{ padding: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--color-border)' }}>
+              <span style={{ fontSize: 12, fontWeight: 500 }}>{preset.custom ? 'Saída' : preset.label}</span>
+              {streaming && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#16a34a' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16a34a', display: 'inline-block' }} />
+                  Streaming ao vivo
+                </span>
+              )}
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--color-neutral-400)' }}>
+                {output.split('\n').length} linhas
+              </span>
+            </div>
+            <pre ref={preRef} style={{ margin: 0, padding: 12, fontSize: 11, fontFamily: 'var(--font-mono)', lineHeight: 1.7, background: 'var(--color-bg-tertiary)', maxHeight: 600, overflow: 'auto', borderRadius: '0 0 8px 8px', whiteSpace: 'pre-wrap' }}>
+              {output || '(aguardando saída...)'}
+            </pre>
           </div>
         )}
 
-        {tab === 'traces' && (
-          <div className="card" style={{ padding: 0 }}>
-            <table className="table">
-              <thead><tr><th>Trace ID</th><th>Operação</th><th>Duração</th><th>Spans</th><th>Status</th><th>Hora</th></tr></thead>
-              <tbody>
-                {TRACES.map(t => (
-                  <tr key={t.id}>
-                    <td><code style={{ fontSize: 11, color: 'var(--color-neutral-400)' }}>{t.id}</code></td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{t.op}</td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: parseFloat(t.duration) > 1000 ? '#ef4444' : parseFloat(t.duration) > 200 ? '#f59e0b' : 'inherit' }}>{t.duration}</td>
-                    <td style={{ fontSize: 13 }}>{t.spans}</td>
-                    <td><span className={`badge ${t.status === 'success' ? 'badge-green' : 'badge-red'}`}>{t.status}</span></td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-neutral-400)' }}>{t.ts}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {tab === 'alerts' && (
-          <div className="card" style={{ padding: 0 }}>
-            <table className="table">
-              <thead><tr><th>Nome</th><th>Expressão</th><th>Duração</th><th>Severidade</th><th>Estado</th></tr></thead>
-              <tbody>
-                {ALERT_RULES.map(a => (
-                  <tr key={a.name}>
-                    <td style={{ fontWeight: 500 }}>{a.name}</td>
-                    <td><code style={{ fontSize: 11, background: 'var(--color-muted)', padding: '1px 6px', borderRadius: 4 }}>{a.expr}</code></td>
-                    <td style={{ fontSize: 12 }}>por {a.duration}</td>
-                    <td><span className={`badge ${severityStyle[a.severity]}`}>{a.severity}</span></td>
-                    <td><span className={`badge ${alertStateStyle[a.state]}`}>{a.state}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {servers.length === 0 && (
+          <div className="empty-state">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+            <p>Nenhum servidor configurado</p>
+            <p style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>Adicione servidores na página Servidores</p>
           </div>
         )}
       </div>

@@ -560,6 +560,26 @@ body {
   border-color: var(--color-fg);
 }
 
+/* Small action button for tables */
+.btn-sm {
+  padding: 3px 9px; font-size: 11px; font-weight: 500;
+  background: none; color: var(--color-neutral-600);
+  border: 1px solid var(--color-border); border-radius: 5px;
+  cursor: pointer; transition: all 0.12s; white-space: nowrap;
+}
+.btn-sm:hover:not(:disabled) { background: var(--color-muted); color: var(--color-fg); }
+.btn-sm:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Empty state placeholder */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 48px 24px; color: var(--color-neutral-500);
+  background: var(--color-bg-secondary); border: 1px solid var(--color-border);
+  border-radius: 10px; text-align: center; gap: 8px;
+}
+.empty-state p { margin: 0; font-size: 13px; }
+.empty-state svg { opacity: 0.4; }
+
 @media (max-width: 768px) {
   .sidebar { display: none; }
   .main { margin-left: 0; }
