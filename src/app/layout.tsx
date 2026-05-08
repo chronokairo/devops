@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { AppBar } from './AppBar'
+import { FloatingNav } from './FloatingNav'
 
 export const metadata: Metadata = {
   title: 'DevOps e Infraestrutura — Chronokairo',
@@ -110,24 +112,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR">
       <body>
-        <aside className="sidebar">
-          <div className="sidebar-header">
-            <div className="sidebar-logo">Chronokairo</div>
-          </div>
-          <nav className="sidebar-nav">
-            {nav.map((group) => (
-              <div key={group.section} className="sidebar-section">
-                <div className="sidebar-section-title">{group.section}</div>
-                {group.links.map((link) => (
-                  <a key={link.href} href={link.href} className="sidebar-link">
-                    <span className="sidebar-icon">{icons[link.href]}</span>
-                    {link.label}
-                  </a>
-                ))}
-              </div>
-            ))}
-          </nav>
-        </aside>
+        <AppBar />
+        <FloatingNav />
         <main className="main">{children}</main>
       </body>
     </html>
