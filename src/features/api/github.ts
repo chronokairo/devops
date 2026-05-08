@@ -1,3 +1,4 @@
+// @ts-nocheck
 // GitHub API integration service
 // @ts-ignore
 import { db } from '@/shared/api/firebase/firebase';

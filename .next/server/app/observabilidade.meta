@@ -1,0 +1,15 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/observabilidade/layout,_N_T_/observabilidade/page,_N_T_/observabilidade"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/observabilidade/__PAGE__",
+    "/observabilidade",
+    "/_index",
+    "/_head"
+  ]
+}

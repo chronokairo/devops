@@ -6,7 +6,28 @@ export const metadata: Metadata = {
   description: 'CI/CD, deploy, monitoramento e cloud',
 }
 
-const nav = {"devops":{"name":"DevOps e Infraestrutura","links":[{"href":"/","label":"Dashboard"},{"href":"/cicd","label":"CI/CD"},{"href":"/deploy","label":"Deploy"},{"href":"/monitoramento","label":"Monitoramento"},{"href":"/infra","label":"Infraestrutura"}]}}
+const nav = [
+  { section: 'Geral', links: [{ href: '/', label: 'Dashboard' }] },
+  { section: 'Pipelines', links: [
+    { href: '/cicd', label: 'CI/CD' },
+    { href: '/deploy', label: 'Deploy' },
+  ]},
+  { section: 'Conteineres', links: [
+    { href: '/docker', label: 'Docker' },
+    { href: '/kubernetes', label: 'Kubernetes' },
+  ]},
+  { section: 'Infraestrutura', links: [
+    { href: '/infra', label: 'Infraestrutura' },
+    { href: '/servidores', label: 'Servidores' },
+    { href: '/redes', label: 'Redes' },
+    { href: '/cloud', label: 'Cloud' },
+  ]},
+  { section: 'Operacoes', links: [
+    { href: '/monitoramento', label: 'Monitoramento' },
+    { href: '/observabilidade', label: 'Observabilidade' },
+    { href: '/backup', label: 'Backup' },
+  ]},
+];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -17,10 +38,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="sidebar-logo">Chronokairo</div>
           </div>
           <nav className="sidebar-nav">
-            {Object.entries(nav).map(([key, section]) => (
-              <div key={key} className="sidebar-section">
-                <div className="sidebar-section-title">{section.name}</div>
-                {section.links.map((link: { href: string; label: string }) => (
+            {nav.map((group) => (
+              <div key={group.section} className="sidebar-section">
+                <div className="sidebar-section-title">{group.section}</div>
+                {group.links.map((link) => (
                   <a key={link.href} href={link.href} className="sidebar-link">{link.label}</a>
                 ))}
               </div>

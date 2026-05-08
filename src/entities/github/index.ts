@@ -6,7 +6,7 @@ export type {
   GitHubIssueComment,
   CreateIssueInput,
   UpdateIssueInput,
-} from '@/features/operations/types/issue.types';
+} from '@/features/types/issue.types';
 
 export type {
   GitHubPullRequest,
@@ -18,7 +18,7 @@ export type {
   CreatePullRequestInput,
   UpdatePullRequestInput,
   MergePullRequestInput,
-} from '@/features/operations/types/pull-request.types';
+} from '@/features/types/pull-request.types';
 
 export type {
   GitHubCommit,
@@ -28,7 +28,7 @@ export type {
   GitHubCommitStatus,
   GitHubStatus,
   GitHubCommitComparison,
-} from '@/features/operations/types/commit.types';
+} from '@/features/types/commit.types';
 
 export type {
   GitHubWorkflow,
@@ -37,7 +37,7 @@ export type {
   GitHubWorkflowStep,
   GitHubArtifact,
   GitHubWorkflowUsage,
-} from '@/features/operations/types/workflow.types';
+} from '@/features/types/workflow.types';
 
 export type {
   GitHubRepository,
@@ -48,4 +48,4 @@ export type {
   GitHubReleaseAsset,
   GitHubDeployment,
   GitHubDeploymentStatus,
-} from '@/features/operations/types/repository.types';
+} from '@/features/types/repository.types';

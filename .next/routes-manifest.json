@@ -1,0 +1,195 @@
+{
+  "version": 3,
+  "pages404": true,
+  "appType": "app",
+  "caseSensitive": false,
+  "basePath": "",
+  "redirects": [
+    {
+      "source": "/:path+/",
+      "destination": "/:path+",
+      "internal": true,
+      "priority": true,
+      "statusCode": 308,
+      "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$"
+    }
+  ],
+  "headers": [],
+  "onMatchHeaders": [],
+  "rewrites": {
+    "beforeFiles": [],
+    "afterFiles": [],
+    "fallback": []
+  },
+  "dynamicRoutes": [],
+  "staticRoutes": [
+    {
+      "page": "/",
+      "regex": "^/(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/(?:/)?$"
+    },
+    {
+      "page": "/_global-error",
+      "regex": "^/_global\\-error(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_global\\-error(?:/)?$"
+    },
+    {
+      "page": "/_not-found",
+      "regex": "^/_not\\-found(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_not\\-found(?:/)?$"
+    },
+    {
+      "page": "/api/backup",
+      "regex": "^/api/backup(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/backup(?:/)?$"
+    },
+    {
+      "page": "/api/cicd",
+      "regex": "^/api/cicd(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/cicd(?:/)?$"
+    },
+    {
+      "page": "/api/cloud",
+      "regex": "^/api/cloud(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/cloud(?:/)?$"
+    },
+    {
+      "page": "/api/deploy",
+      "regex": "^/api/deploy(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/deploy(?:/)?$"
+    },
+    {
+      "page": "/api/docker",
+      "regex": "^/api/docker(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/docker(?:/)?$"
+    },
+    {
+      "page": "/api/infra",
+      "regex": "^/api/infra(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/infra(?:/)?$"
+    },
+    {
+      "page": "/api/kubernetes",
+      "regex": "^/api/kubernetes(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/kubernetes(?:/)?$"
+    },
+    {
+      "page": "/api/monitoring",
+      "regex": "^/api/monitoring(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/monitoring(?:/)?$"
+    },
+    {
+      "page": "/api/networks",
+      "regex": "^/api/networks(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/networks(?:/)?$"
+    },
+    {
+      "page": "/api/observability",
+      "regex": "^/api/observability(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/observability(?:/)?$"
+    },
+    {
+      "page": "/api/servers",
+      "regex": "^/api/servers(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/servers(?:/)?$"
+    },
+    {
+      "page": "/backup",
+      "regex": "^/backup(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/backup(?:/)?$"
+    },
+    {
+      "page": "/cicd",
+      "regex": "^/cicd(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/cicd(?:/)?$"
+    },
+    {
+      "page": "/cloud",
+      "regex": "^/cloud(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/cloud(?:/)?$"
+    },
+    {
+      "page": "/deploy",
+      "regex": "^/deploy(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/deploy(?:/)?$"
+    },
+    {
+      "page": "/docker",
+      "regex": "^/docker(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/docker(?:/)?$"
+    },
+    {
+      "page": "/infra",
+      "regex": "^/infra(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/infra(?:/)?$"
+    },
+    {
+      "page": "/kubernetes",
+      "regex": "^/kubernetes(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/kubernetes(?:/)?$"
+    },
+    {
+      "page": "/monitoramento",
+      "regex": "^/monitoramento(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/monitoramento(?:/)?$"
+    },
+    {
+      "page": "/observabilidade",
+      "regex": "^/observabilidade(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/observabilidade(?:/)?$"
+    },
+    {
+      "page": "/redes",
+      "regex": "^/redes(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/redes(?:/)?$"
+    },
+    {
+      "page": "/servidores",
+      "regex": "^/servidores(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/servidores(?:/)?$"
+    }
+  ],
+  "dataRoutes": [],
+  "rsc": {
+    "header": "rsc",
+    "varyHeader": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+    "prefetchHeader": "next-router-prefetch",
+    "didPostponeHeader": "x-nextjs-postponed",
+    "contentTypeHeader": "text/x-component",
+    "suffix": ".rsc",
+    "prefetchSegmentHeader": "next-router-segment-prefetch",
+    "prefetchSegmentSuffix": ".segment.rsc",
+    "prefetchSegmentDirSuffix": ".segments",
+    "clientParamParsing": false,
+    "dynamicRSCPrerender": false
+  },
+  "rewriteHeaders": {
+    "pathHeader": "x-nextjs-rewritten-path",
+    "queryHeader": "x-nextjs-rewritten-query"
+  }
+}
