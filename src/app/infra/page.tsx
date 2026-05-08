@@ -102,7 +102,7 @@ export default function Page() {
       filterActive === 'all'      ? true
       : filterActive === 'running'  ? (s.active === 'active'   && s.sub === 'running')
       : filterActive === 'failed'   ? (s.active === 'failed')
-      : filterActive === 'inactive' ? (s.active === 'inactive');
+      : (s.active === 'inactive');
     return matchesText && matchesState;
   });
 
